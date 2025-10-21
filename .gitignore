@@ -214,7 +214,7 @@ __marimo__/
 
 # venv
 pyvenv.cfg
-/bin
-/include
-/lib
-/share
+bin/
+include/
+lib/
+share/
