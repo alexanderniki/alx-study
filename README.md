@@ -8,6 +8,7 @@
 Статистика:
 
 - STEPIK. Основы статистики. Часть 1 [→](https://stepik.org/course/76)
+- YANDEX. Основы статистики и A/B-тестирования [→](https://start.practicum.yandex/statistics-basic/)
 
 
 Анализ данных:
