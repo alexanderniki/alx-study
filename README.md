@@ -16,3 +16,4 @@
 - STEPIK. Анализ данных просто и доступно [→](https://stepik.org/course/73952)
 - НЕТОЛОГИЯ. Основы анализа данных в SQL, Python, Power BI, DataLens
 - SIMULATIVE. Pandas
+- SIMULATIVE. Интенсив по SQL (15-22.09.2026)
