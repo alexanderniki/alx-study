@@ -894,24 +894,187 @@ FROM users;
 SELECT * FROM users;
 SELECT * FROM company;
 
+-- Посмотрим на компании
 SELECT 
     DISTINCT name
 FROM company
 ORDER BY name ASC;
 
+-- Посмотрим на активных и неактивных пользователей
 SELECT
+    SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) AS cnt_active_users,
+    SUM(CASE WHEN is_active = 0 THEN 1 ELSE 0 END) AS cnt_not_active_users
+FROM users;
+
+SELECT 
     name AS company_name,
     SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) AS cnt_active_users,
     SUM(CASE WHEN is_active = 0 THEN 1 ELSE 0 END) AS cnt_not_active_users
 FROM (
+    SELECT *
+    FROM company
+    LEFT JOIN users
+        ON company.id = users.company_id
+) users_companies
+GROUP BY company_name
+ORDER BY company_name ASC;
+
+
+/*
+ * SQL. Практика 8. Задача 10
+ * 
+ * Требуется вывести все электронные почты в виде списка, разделяя их точкой с запятой и 
+ * пробелом (‘; ’) в отсортированном по возрастанию email
+ */
+
+SELECT string_agg(email, '; ') AS list_emails
+FROM (
+    SELECT email
+    FROM users
+    ORDER BY email ASC
+) user_email;
+
+-- Или
+
+SELECT
+    string_agg(email, '; ' ORDER BY email) AS list_emails
+FROM users;
+
+
+
+/*
+ * SQL. Практика 8. Задача 11
+ * 
+ * Для каждой компании сформируйте список фамилий её пользователей.
+ * 
+ * Фамилии внутри списка:
+ *     - разделите строкой ', '
+ *     - расположите в порядке возрастания поля email.
+ * 
+ * Пользователей, у которых фамилия не указана, учитывать не нужно. 
+ * В результате должны остаться только компании, у которых есть хотя бы один 
+ * пользователь с указанной фамилией.
+ */
+
+SELECT * FROM (
     SELECT
-        users.id,
-        users.is_active,
-        company.name
+        company.name AS company_name,
+        string_agg(users.last_name, ', ' ORDER BY users.email) AS list_last_names
     FROM users
     LEFT JOIN company
         ON users.company_id = company.id
+    GROUP BY company.name
 ) user_company
-WHERE name IS NOT NULL 
-GROUP BY company_name
-ORDER BY name;
+WHERE company_name IS NOT NULL
+    AND list_last_names IS NOT NULL;
+
+-- Или
+
+SELECT
+   company.name AS company_name,
+   STRING_AGG(users.last_name, ', ' ORDER BY users.email) AS list_last_names
+FROM users
+JOIN company
+    ON company.id = users.company_id
+WHERE users.last_name IS NOT NULL
+GROUP BY company.name
+ORDER BY company_name;
+
+
+
+/*
+ * SQL. Практика 8. Задача 12
+ * 
+ * Требуется вывести следующую информацию по всем пользователям:
+ *     - идентификатор
+ *     - логин
+ *     - наименование задачи, которую пользователь наиболее часто отправлял на проверку
+ * 
+ * Решите задачу с помощью функции MODE()
+ * Если у пользователя несколько задач с одинаковой максимальной частотой отправки, 
+ * то выберите задачу по наименованию задачи в алфавитном порядке.
+ * Если пользователь ничего не отправлял, то выведите Пользователь ничего не отправлял.
+ * 
+ * Результат отсортируйте по возрастанию поля id.
+ */
+SELECT * FROM users;
+SELECT * FROM codesubmit;
+SELECT * FROM problem;
+
+SELECT
+    users.id,
+    users.username,
+    CASE 
+        WHEN mode() WITHIN GROUP (ORDER BY problem.name ASC) IS NOT NULL THEN mode() WITHIN GROUP (ORDER BY problem.name ASC)
+        ELSE 'Пользователь ничего не отправлял'
+    END
+FROM users
+LEFT JOIN codesubmit
+    ON codesubmit.user_id = users.id
+LEFT JOIN problem
+    ON codesubmit.problem_id = problem.id
+GROUP BY users.id, users.username
+ORDER BY users.id;
+
+
+
+/*
+ * SQL. Практика 8. Задача 13
+ * 
+ * Из таблицы users выведите в одной строке массив значений поля username.
+ * 
+ * Элементы массива расположите:
+ *     - по убыванию поля date_joined
+ *     - при одинаковом значении date_joined — по возрастанию поля username
+ */
+SELECT
+    array_agg(username ORDER BY date_joined DESC, username ASC)
+FROM users;
+
+
+
+/*
+ * SQL. Практика 8. Задача 14
+ * 
+ * Вывести следующую информацию о пользователях, которые отправляли код на проверку:
+ *     - идентификатор пользователя (id)
+ *     - логин пользователя (username)
+ *     - массив уникальных идентификаторов задач, которые пользователи отправляли 
+ *       на проверку в отсортированном виде по возрастанию поля problem_id (unique_problem_ids_array)
+ * 
+ * Результат отсортируйте по возрастанию поля id.
+ */
+SELECT * FROM users;
+SELECT * FROM codesubmit;
+
+SELECT
+    users.id,
+    users.username,
+    --
+    array_agg(DISTINCT codesubmit.problem_id ORDER BY codesubmit.problem_id ASC) AS unique_problem_ids_array
+FROM users
+    JOIN codesubmit
+        ON users.id = codesubmit.user_id
+GROUP BY users.id, users.username
+ORDER BY users.id ASC;
+
+
+
+/*
+ * SQL. Практика 8. Задача 15
+ * 
+ * Рассчитайте какую оценку получили 95% активных пользователей, 
+ * которые зарегистрировались после 1 января 2022 года и имеют оценку строго выше 100.
+ * Примечание. Рассчитайте интерполированное значение, используя функцию PERCENTILE_CONT для 
+ * непрерывных метрик (аналог функции PERCENTILE_DISC)
+ */
+SELECT * FROM users;
+
+SELECT
+    PERCENTILE_CONT(0.95) WITHIN GROUP (
+        ORDER BY score ASC
+    ) AS p95
+FROM users
+WHERE
+    score > 100
+    AND date_joined > make_date(2022, 01, 01);
