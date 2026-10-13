@@ -1078,3 +1078,286 @@ FROM users
 WHERE
     score > 100
     AND date_joined > make_date(2022, 01, 01);
+
+
+
+/* ************************************************************
+ * Подзапросы и CTE
+ ************************************************************ */
+
+-- Пример работы с подзапросами
+SELECT 
+    problem_id,
+    avg(cnt)
+FROM (
+    SELECT
+        user_id,
+        problem_id,
+        count(*) AS cnt
+    FROM (
+        SELECT 
+            user_id,
+            problem_id
+        FROM coderun
+        UNION ALL
+        SELECT
+            user_id,
+            problem_id
+        FROM codesubmit
+    ) all_trials
+    GROUP BY 
+        user_id,
+        problem_id
+    ORDER BY 
+        user_id ASC,
+        problem_id ASC
+) trials_by_users_and_problems
+GROUP BY problem_id
+ORDER BY problem_id ASC;
+
+-- То же самое, только с использованием CTE
+WITH 
+    all_trials AS (
+        SELECT 
+            user_id,
+            problem_id
+        FROM coderun
+        UNION ALL
+        SELECT
+            user_id,
+            problem_id
+        FROM codesubmit
+    ),
+    trials_by_users_and_problems AS (
+        SELECT
+            user_id,
+            problem_id,
+            count(*) AS cnt
+        FROM all_trials
+        GROUP BY 
+            user_id,
+            problem_id
+        ORDER BY 
+            user_id ASC,
+            problem_id ASC
+    )
+SELECT 
+    problem_id,
+    avg(cnt)
+FROM trials_by_users_and_problems
+GROUP BY problem_id
+ORDER BY problem_id ASC;
+
+
+/*
+ * SQL. Практика 9. Задача 1
+ * 
+ * Вывести пользователей с максимальным количеством очков опыта на платформе.
+ */
+
+SELECT 
+    username,
+    last_name,
+    first_name,
+    date_joined
+FROM users
+WHERE score = (SELECT max(score) FROM users);
+
+
+
+/*
+ * SQL. Практика 9. Задача 2
+ * 
+ * Вывести задачи, которые имеют рейтинг выше среднего.
+ */
+-- Посмотрим на значение рейтинга
+SELECT avg(rating)
+FROM problem;
+
+SELECT 
+    name,
+    complexity,
+    rating
+FROM problem
+WHERE rating > (SELECT avg(rating) FROM problem)
+ORDER BY name ASC;
+
+
+
+/*
+ * SQL. Практика 9. Задача 3
+ * 
+ * вывести уникальные идентификаторы задач, для которых 
+ * код был отправлен на проверку на языках SQL и Python.
+ */
+SELECT * FROM codesubmit;
+SELECT * FROM "language";
+
+SELECT
+    DISTINCT problem_id
+FROM codesubmit
+WHERE
+    language_id IN (SELECT id FROM "language" WHERE name LIKE 'Python' OR name LIKE 'SQL')
+ORDER BY problem_id ASC;
+
+
+/* 
+ * SQL. Практика 9. Задача 4
+ * 
+ * Вывести идентификаторы пользователей, которые имеют более 5 правильных решений.
+ * 
+ * Правильное решение имеет значение is_false = 0.
+ * Отправленный на проверку код находится в таблице codesubmit.
+ * Результат отсортируйте по возрастанию поля id.
+ */
+SELECT * FROM users;
+SELECT * FROM codesubmit;
+
+SELECT id FROM (
+    SELECT 
+        user_id AS id,
+        count(is_false)
+    FROM codesubmit
+    WHERE is_false = 0
+    GROUP BY user_id
+    HAVING count(is_false) > 5
+    ORDER BY id ASC
+) users;
+
+
+/*
+ * SQL. Практика 9. Задача 5
+ * 
+ * вывести названия задач, у которых рейтинг не 
+ * превышает 5 единиц от минимального рейтинга среди всех задач.
+ * 
+ * Результат отсортируйте по возрастанию поля name
+ */
+SELECT * FROM problem;
+SELECT
+    min(rating),
+    min(rating)+5
+FROM problem;
+
+WITH
+    rating_intervals AS (
+        SELECT
+            min(rating) AS lower_limit,
+            min(rating)+5 AS upper_limit
+        FROM problem
+    )
+SELECT
+    name
+    --rating
+FROM problem, rating_intervals
+WHERE rating <= rating_intervals.upper_limit
+ORDER BY name ASC;
+
+
+/*
+ * SQL. Практика 9. Задача 6
+ * Вывести идентификаторы пользователей, которые до 20 мая 2022 года включительно 
+ * не отправляли на проверку код более 30 дней.
+ * Результат отсортируйте по возрастанию поля user_id
+ */
+SELECT * FROM codesubmit;
+
+WITH last_submissions AS (
+    SELECT
+        user_id,
+        max(created_at) AS last_submission_date
+    FROM codesubmit
+    WHERE created_at <= make_date(2022, 05, 20)
+    GROUP BY user_id
+)
+SELECT
+    user_id
+FROM last_submissions
+WHERE
+    last_submission_date < make_date(2022, 05, 20) - INTERVAL '30 days'
+ORDER BY user_id ASC;
+
+
+/*
+ * SQL. Практика 9. Задача 7
+ * 
+ * Вывести идентификаторы пользователей, которые хотя бы один раз отправляли код на выполнение.
+ * Результат отсортируйте по возрастанию поля id.
+ */
+SELECT * FROM users;
+SELECT * FROM coderun;
+
+SELECT user_id AS id
+FROM coderun
+GROUP BY user_id
+ORDER BY user_id ASC;
+
+
+
+/*
+ * SQL. Практика 9. Задача 8
+ * 
+ * Вывести идентификаторы пользователей, которые никогда не отправляли код на выполнение.
+ * Результат отсортируйте по возрастанию поля id.
+ */
+SELECT * FROM users;
+SELECT * FROM coderun;
+
+SELECT
+    users.id AS id
+FROM users
+LEFT JOIN coderun
+    ON coderun.user_id = users.id
+WHERE coderun.user_id IS NULL
+ORDER BY users.id ASC;
+
+
+/*
+ * SQL. Практика 9. Задача 9
+ * 
+ * Вывести идентификаторы пользователей с company_id = 1 и имеющих количество очков опыта 
+ * на платформе больше, чем хотя бы у одного из пользователей с company_id = 10.
+ */
+WITH
+    score_level AS (
+        -- Считаем минимальное значение рейтинга
+        SELECT min(score) AS value
+        FROM users
+        WHERE company_id = 10
+    )
+SELECT 
+    users.id
+FROM users, score_level
+WHERE
+    users.company_id = 1 AND
+        users.score > score_level.value
+ORDER BY users.id ASC;
+    
+
+
+/*
+ * SQL. Практика 9. Задача 10
+ * 
+ * Вывести идентификаторы пользователей с company_id = 7 и 
+ * имеющих количество очков опыта на платформе больше каждого 
+ * из пользователей с company_id = 6.
+ */
+WITH 
+    score_level AS (
+        SELECT max(score) AS value
+        FROM users
+        WHERE company_id = 6
+    )
+SELECT 
+    users.id
+FROM users, score_level
+WHERE
+    users.company_id = 7 AND
+        users.score > score_level.value
+ORDER BY users.id ASC;
+
+
+
+
+
+
