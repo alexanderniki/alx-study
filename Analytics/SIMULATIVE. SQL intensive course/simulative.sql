@@ -1358,6 +1358,410 @@ ORDER BY users.id ASC;
 
 
 
+/* ************************************************************
+ * Оконные функции
+ ************************************************************ */
+
+SELECT
+    *,
+    row_number() OVER(
+        PARTITION BY user_id
+        ORDER BY type_id
+    ) AS rn,
+    rank() OVER(
+        PARTITION BY user_id
+        ORDER BY type_id
+    ) AS rnk,
+    dense_rank() OVER(
+        PARTITION BY user_id
+        ORDER BY type_id
+    ) AS drnk
+FROM "transaction"
+WHERE user_id > 100
+ORDER BY
+    user_id, type_id;
+
+
+SELECT
+    *,
+    lead(value) OVER(
+        PARTITION BY user_id
+        ORDER BY created_at
+    ) AS next_val,
+    lag(value) OVER(
+        PARTITION BY user_id
+        ORDER BY created_at
+    ) AS prev_val,
+    lag(value, 2, 0::smallint) OVER(
+        -- Второй аргумент указывет на столько ячеек будет сдвиг
+        -- Третий аргумент - значение по умолчанию вместо NULL
+        PARTITION BY user_id
+        ORDER BY created_at
+    ) AS prev_val_2
+FROM "transaction"
+WHERE user_id > 100
+ORDER BY
+    user_id, created_at;
+
+SELECT
+    *,
+    first_value(created_at) OVER(
+        PARTITION BY user_id
+        ORDER BY created_at
+    ) AS first_dt,
+    last_value(created_at) OVER(
+        PARTITION BY user_id
+        ORDER BY created_at
+        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) AS last_dt_current,
+    last_value(created_at) OVER(
+        PARTITION BY user_id
+        ORDER BY created_at
+        ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+    ) AS last_dt_unbounded,
+    created_at - first_value(created_at) OVER(
+        PARTITION BY user_id
+        ORDER BY created_at
+    ) AS time_gap
+FROM "transaction"
+WHERE user_id > 100
+ORDER BY
+    user_id, created_at;
+
+
+-- Сумма накопительным итогом
+SELECT
+    *,
+    sum(value) OVER(
+        PARTITION BY user_id
+        ORDER BY created_at
+    ) AS c_sum,
+    sum(value) OVER(
+        PARTITION BY user_id
+        ORDER BY created_at
+        -- Меняем повевединие окна и ставим все окно, вместо 
+        -- интервала от начала до текущей строки
+        ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+    ) AS sum_total,
+    sum(
+        CASE WHEN type_id = 3 THEN -value ELSE value END
+    ) OVER (
+        PARTITION BY user_id
+        ORDER BY created_at
+    ) AS c_sum_vals,
+    -- Скользящее среднее
+    avg(value) OVER(
+        PARTITION BY user_id
+        ORDER BY created_at
+    ) AS avg
+FROM "transaction"
+WHERE user_id > 100
+ORDER BY
+    user_id, created_at;
+
+
+/*
+ * SQL. Практика 10. Задача 1
+ * 
+ * вывести следующую информацию о задачах:
+ * 
+ *     - наименование задачи
+ *     - рейтинг задачи
+ *     - ранг задачи, где 1 ранг имеют задачи с наибольшим рейтингом (rank_rating)
+ * 
+ * Ранг должен рассчитываться с промежутками в значениях ранжирования.
+ * Исключите записи, у которых рейтинг равен NULL.
+ * Результат отсортируйте по возрастанию полей rank_rating и name.
+ */
+SELECT * FROM problem;
+
+SELECT
+    name,
+    rating,
+    rank() OVER(
+        ORDER BY rating DESC
+    ) AS rank_rating
+FROM problem
+WHERE rating IS NOT NULL
+ORDER BY rank_rating, name;
+
+
+
+/*
+ * SQL. Практика 10. Задача 2
+ * 
+ * Вывести следующую информацию о пользователях:
+ * 
+ *     - идентификатор
+ *     - логин
+ *     - ранг пользователя (dns_rank_score)
+ * 
+ * 1 ранг имеют пользователи с наибольшим количеством очков опыта на платформе.
+ * Результат отсортируйте по возрастанию полей dns_rank_score и id.
+ */
+SELECT * FROM users;
+
+SELECT
+    id,
+    username,
+    dense_rank() OVER (
+        ORDER BY score DESC
+    ) AS dns_rank_score
+FROM users
+WHERE score > 100
+ORDER BY dns_rank_score, id;
+
+
+/*
+ * SQL. Практика 10. Задача 3
+ * 
+ * С помощью функции NTILE необходимо распределить задачи на 5 групп по их 
+ * рейтингу и вывести следующую информацию:
+ * 
+ *     - группа, к которой относится задача (group_problem)
+ *     - наименование задачи
+ *     - рейтинг задачи
+ * 
+ * Группы: первой группе соответствуют задачи с наибольшим рейтингом
+ * Оставьте только те задачи, у которых рейтинг не равен NULL
+ * Результат отсортируйте по возрастанию поля group_problem, по убыванию поля 
+ * rating и по возрастанию поля name.
+ */
+SELECT
+    NTILE(5) OVER(
+        ORDER BY rating DESC
+    ) AS group_problem,
+    name,
+    rating
+FROM problem
+WHERE rating IS NOT NULL
+ORDER BY
+    group_problem ASC,
+    rating DESC,
+    name ASC;
+
+
+/*
+ * SQL. Практика 10. Задача 4
+ * 
+ * Необходимо вывести следующую информацию:
+ * 
+ *     - идентификатор пользователя (user_id)
+ *     - дата и время входа на платформу (entry_at)
+ *     - номер входа на платформу для каждого пользователя, где 
+ *       1-й номер это последний вход на платформу (rn_entry_at)
+ * 
+ * Результат отсортируйте по возрастанию полей user_id и rn_entry_at
+ */
+SELECT * FROM userentry;
+
+SELECT
+	user_id,
+	entry_at,
+	row_number() OVER(
+		PARTITION BY user_id
+		ORDER BY entry_at DESC
+	) AS rn_entry_at
+FROM userentry
+ORDER BY
+	user_id ASC,
+	rn_entry_at ASC;
+
+
+/*
+ * SQL. Практика 10. Задача 5
+ * 
+ * Напишите запрос, который выведет последнего зарегистрированного пользователя для компании.
+ * 
+ * В результате должны быть поля: company_name, username
+ * Оставьте только те компании у которых были зарегистрированные пользователи
+ *  
+ * Результат отсортируйте по возрастанию поля company_name.
+ * 
+ */
+SELECT * FROM users;
+SELECT * FROM company;
+
+SELECT
+	company_name,
+	username
+FROM (
+	SELECT
+		users.id,
+		users.date_joined,
+		users.username,
+		users.company_id,
+		--
+		company.id,
+		company.name AS company_name,
+		--
+		 last_value(date_joined) OVER(
+		 	PARTITION BY company.id
+		 	ORDER BY date_joined ASC
+		 	ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+		) AS last_user
+	FROM users
+	LEFT JOIN company
+		ON users.company_id = company.id
+	WHERE users.company_id IS NOT NULL
+	ORDER BY company.name ASC
+) users_companies
+WHERE date_joined = last_user;
+
+
+/*
+ * SQL. Практика 10. Задача 6
+ * 
+ * Напишите запрос, который выведет количество отправок кода на проверку для месяца, 
+ * имеющего 7-й ранг по количеству отправок кода на проверку, отсортированных по убыванию.
+ * 
+ */
+SELECT * FROM codesubmit;
+
+SELECT
+	*,
+	dense_rank() OVER (
+		ORDER BY created_at
+	) AS rank
+FROM codesubmit;
+
+
+SELECT
+	attempts_ranked.attempts AS submission_count
+FROM (
+	-- Ранг каждого месяца
+	SELECT
+		*,
+		dense_rank() OVER(
+			ORDER BY attempts DESC
+		) AS submission_rank
+	FROM (
+		-- Количество отправок кода по месяцам
+		SELECT
+			date_trunc('month', created_at) AS month,
+			count(created_at) AS attempts
+		FROM codesubmit
+		GROUP BY date_trunc('month', created_at)
+		ORDER BY attempts DESC
+	) attempts_by_months
+) attempts_ranked
+WHERE attempts_ranked.submission_rank = 7;
+
+
+/*
+ * SQL. Практика 10. Задача 7
+ * 
+ * Напишите запрос, который выведет для языков программирования название 
+ * первой и последней задачи, отправленных проверку.
+ * 
+ * Оставьте только те языки программирования, у которых были отправленные 
+ * на проверку задачи. В результате оставить поля: 
+ * 
+ * - language_name
+ * - first_submission
+ * - last_submission
+ * 
+ * Результат отсортируйте по возрастанию поля language_name.
+ */
+SELECT * FROM codesubmit;
+SELECT * FROM problem;
+SELECT * FROM "language";
+
+SELECT
+	lang.name AS language_name,
+	first_problems.name AS first_submission,
+	last_problems.name AS last_submission
+FROM (
+    -- Первые задачи
+    SELECT
+        problem_id,
+        language_id,
+        problem.name
+    FROM (
+        SELECT
+            id,
+            created_at,
+            problem_id,
+            language_id,
+            first_value(created_at) OVER (
+                PARTITION BY language_id
+                ORDER BY created_at
+            ) AS first_submission_date
+        FROM codesubmit
+    ) AS tasks_submissions
+    LEFT JOIN problem
+        ON tasks_submissions.problem_id = problem.id
+    WHERE created_at = first_submission_date
+) AS first_problems
+LEFT JOIN (
+    -- Последние задачи
+    SELECT
+        problem_id,
+        language_id,
+        problem.name
+    FROM (
+        SELECT
+            id,
+            created_at,
+            problem_id,
+            language_id,
+            last_value(created_at) OVER (
+                PARTITION BY language_id
+                ORDER BY created_at
+                ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+            ) AS last_submission_date
+        FROM codesubmit
+    ) AS tasks_submissions
+    LEFT JOIN problem
+        ON tasks_submissions.problem_id = problem.id
+    WHERE created_at = last_submission_date
+) AS last_problems
+    ON first_problems.language_id = last_problems.language_id
+LEFT JOIN "language" lang
+	ON first_problems.language_id = lang.id
+ORDER BY language_name ASC;
+
+-- Эталонное решение
+
+WITH language_submissions AS (
+  SELECT
+      l."name" AS language_name,
+      FIRST_VALUE(p."name") OVER (PARTITION BY l."name" ORDER BY c.created_at) AS first_submission,
+      LAST_VALUE(p."name") OVER (PARTITION BY l."name" ORDER BY c.created_at ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS last_submission
+  FROM "language" l
+  JOIN codesubmit c
+      ON l.id = c.language_id
+  JOIN problem p
+      ON c.problem_id = p.id
+)
+SELECT
+  language_name,
+  first_submission,
+  last_submission
+FROM language_submissions
+GROUP BY language_name, first_submission, last_submission
+ORDER BY language_name;
+
+
+/*
+ * SQL. Практика 10. Задача 8
+ * 
+ * Напишите запрос, который из таблицы codesubmit выводит следующую информацию:
+ * 
+ *     - отформатированная в виде текста дата регистрации в формате YYYY-MM (yyyy_mm)
+ *     - количество отправленных на проверку задач за каждый месяц (tasks_solved)
+ *     - количество отправленных на проверку задач за 2 месяца назад (tasks_solved_two_months_ago)
+ *     - количество отправленных на проверку задач за 2 месяца вперед (tasks_solved_two_months_ahead)
+ * 
+ * Результат отсортируйте по возрастанию поля yyyy_mm
+ */
+SELECT * FROM codesubmit;
+
+SELECT
+	*,
+	to_char(created_at, 'YYYY-MM') AS yyyy_mm
+FROM codesubmit;
+
 
 
 
