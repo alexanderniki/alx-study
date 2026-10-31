@@ -1762,6 +1762,86 @@ SELECT
 	to_char(created_at, 'YYYY-MM') AS yyyy_mm
 FROM codesubmit;
 
+SELECT
+    to_char(created_at, 'YYYY-MM') AS yyyy_mm,
+    count(*) AS tasks_solved
+FROM codesubmit
+GROUP BY to_char(created_at, 'YYYY-MM')
+ORDER BY yyyy_mm;
+
+WITH monthly_counts AS (
+    SELECT
+        to_char(created_at, 'YYYY-MM') AS yyyy_mm,
+        count(*) AS tasks_solved
+    FROM codesubmit
+    GROUP BY to_char(created_at, 'YYYY-MM')
+)
+SELECT
+    yyyy_mm,
+    tasks_solved,
+    LAG(tasks_solved, 2) OVER (ORDER BY yyyy_mm) AS tasks_solved_two_months_ago,
+    LEAD(tasks_solved, 2) OVER (ORDER BY yyyy_mm) AS tasks_solved_two_months_ahead
+FROM monthly_counts
+ORDER BY yyyy_mm;
 
 
+/*
+ * SQL. Практика 10. Задача 9
+ * 
+ * Напишите запрос, который выведет из таблицы userentry следующую информацию:
+ * 
+ *     - идентификатор пользователя (user_id)
+ *     - идентификатор страницы входа (page_id)
+ *     - дата и время входа на платформу (entry_at)
+ *     - идентификатор предыдущей страницы, которую посетил пользователь (previous_page)
+ *     - идентификатор следующей страницы, которые посетил пользователь (next_page)
+ * 
+ * Результат отсортируйте по возрастанию полей user_id и entry_at
+ */
+SELECT * FROM userentry;
 
+SELECT 
+    user_id,
+    page_id,
+    entry_at,
+    LAG(page_id, 1) OVER (PARTITION BY user_id ORDER BY user_id, entry_at) AS previous_page,
+    LEAD(page_id, 1) OVER (PARTITION BY user_id ORDER BY user_id, entry_at) AS next_page
+FROM userentry
+ORDER BY
+    user_id,
+    entry_at;
+
+
+/*
+ * SQL. Практика 10. Задача 10
+ * 
+ * Напишите запрос, который выведет следующую информацию:
+ *
+ *    - год и месяц регистрации пользователя в формате YYYY-MM (year_month)
+ *    - общее количество очков опыта на платформе для каждого месяца (sum_score)
+ *    - общее количество очков опыта на платформе за предыдущий месяц (previous_sum_score)
+ *    - разница в баллах между текущим общим количеством очков опыта на платформе за месяц и 
+ *      общим количеством очков опыта на платформе за месяц и предыдущей суммой баллов (score_difference)
+ * 
+ * Результат отсортируйте по возрастанию поля year_month
+ */
+SELECT * FROM users;
+
+WITH users_months_score AS (
+    SELECT
+        id,
+        to_char(date_joined, 'YYYY-MM') AS year_month,
+        sum(score) AS sum_score
+    FROM users
+    GROUP BY
+        id,
+        to_char(date_joined, 'YYYY-MM')
+    ORDER BY year_month ASC
+)
+SELECT
+    id,
+    year_month,
+    sum(sum_score) AS sum_score,
+    LAG(sum_score, 1) OVER (PARTITION BY user_id ORDER BY user_id, entry_at) AS previous_page,
+FROM users_months_score
+GROUP BY id, year_month;
